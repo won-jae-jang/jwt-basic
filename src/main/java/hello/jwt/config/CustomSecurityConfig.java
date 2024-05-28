@@ -2,6 +2,9 @@ package hello.jwt.config;
 
 import hello.jwt.security.APIUserDetailsService;
 import hello.jwt.security.filter.APILoginFilter;
+import hello.jwt.security.filter.TokenCheckFilter;
+import hello.jwt.security.handler.APILoginSuccessHandler;
+import hello.jwt.util.JWTUtil;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.boot.autoconfigure.security.servlet.PathRequest;
@@ -28,6 +31,7 @@ import org.springframework.security.web.authentication.UsernamePasswordAuthentic
 public class CustomSecurityConfig {
 
     private final APIUserDetailsService apiUserDetailsService;
+    private final JWTUtil jwtUtil;
 
     @Bean
     public PasswordEncoder passwordEncoder() {
@@ -47,6 +51,8 @@ public class CustomSecurityConfig {
     @Bean
     public SecurityFilterChain filterChain(final HttpSecurity http) throws Exception {
 
+        log.info("----------------configure -----------------");
+
         //authenticationManager config
         AuthenticationManagerBuilder authenticationManagerBuilder = http.getSharedObject(AuthenticationManagerBuilder.class);
 
@@ -64,12 +70,25 @@ public class CustomSecurityConfig {
         APILoginFilter apiLoginFilter = new APILoginFilter("/generateToken");
         apiLoginFilter.setAuthenticationManager(authenticationManager);
 
+        //APILoginSuccessHandler
+        APILoginSuccessHandler successHandler = new APILoginSuccessHandler(jwtUtil);
+        //successHandler setting
+        apiLoginFilter.setAuthenticationSuccessHandler(successHandler);
+
         //apiLoginFilter 위치 조정
         http.addFilterBefore(apiLoginFilter, UsernamePasswordAuthenticationFilter.class);
 
-        log.info("----------------configure -----------------");
+        //api로 시작하는 모든 경로는 tokenCheckFilter 동작
+        http.addFilterBefore(
+                tokenCheckFilter(jwtUtil),
+                UsernamePasswordAuthenticationFilter.class);
+
         http.csrf(AbstractHttpConfigurer::disable); //csrf 토큰의 비활성화
         http.sessionManagement(session -> session.sessionCreationPolicy(SessionCreationPolicy.STATELESS)); //세션을 사용하지 않음
         return http.build();
+    }
+
+    private TokenCheckFilter tokenCheckFilter(JWTUtil jwtUtil) {
+        return new TokenCheckFilter(jwtUtil);
     }
 }
